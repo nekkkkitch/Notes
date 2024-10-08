@@ -1,0 +1,45 @@
+body{
+    background-color:#fff7db;
+}
+.Note{
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+.NoteInside{
+    background-color: #ffe6b8;
+    border: 2px solid #c8b68a;
+    border-radius: 5px;
+    width: 90vw;
+    height: 43.5vh; /*Вот бы всё на глаз настраивать*/
+    padding: 10px;
+    margin-right: 2vw;
+    margin-left: 2vw;
+}
+.TitleInput{
+    width: 100%;
+    height: 8vh;
+    font-size: 8vh;
+    margin-bottom: 1vh;
+    background-color: transparent;
+    border: none;
+}
+.DescriptionInput{
+    width: 100%;
+    height: 65%;
+    background-color: transparent;
+    border: none;
+    resize: none;
+    margin-bottom: 10px;
+}
+.Buttons{
+    display: inline;
+}
+.Cancel{
+    margin-left: 20px;
+}
+.Create{
+    margin-left:auto;
+    margin-right:10px; 
+}
