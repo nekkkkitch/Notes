@@ -1,0 +1,35 @@
+    <!DOCTYPE html>
+<html>
+
+    <head>
+        <link rel="stylesheet" href="/resources/css/MainPage.css">
+        <meta charset="UTF-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <title>Нотесы</title>
+    </head>
+    <body>
+        <div class="UpperPanel">
+            <button type="addNote" id="addNote"><img src="/resources/Images/plus.png" width="100%" height="100%"/></button>
+            <button type="addNote" id="userPng" onclick="ShowPanel()"><img src="/resources/Images/user.png" width="100%" height="100%"/></button>
+            <hr color="gray" class="UpperPanelLine"/>
+        </div>
+        <div class="popup" id="popupMenu">
+            <a href="/login"><div class="popupText">Войти</div></a>
+            <div class="popupText">Настройки</div>
+            <div class="popupText">Выйти</div>
+        </div>
+        <div class="Note">
+            <div class="NoteInside">
+                <span style="white-space: pre-line" class="NoteTitle"><b>Title</b></span>
+                <div></div>
+                <span style="white-space: pre-line" class="NoteDescription"></span>
+            </div>
+            <div class="Images">
+                <img src="/resources/Images/pencil.png" class="Pencil"/>
+                <br clear="all"/>
+                <img src="/resources/Images/trashcan.png" class="Trashcan"/>
+            </div>
+        </div>
+        <script src="/resources/js/MainPage.js"></script>
+    </body>
+</html>

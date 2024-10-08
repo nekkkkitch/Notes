@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+
+    <head>
+        <link rel="stylesheet" href="/resources/css/LoginPage.css">
+        <meta charset="UTF-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <title>Логинимся дада</title>
+    </head>
+    <body>
+        <div class="RegisterThing">
+            <form name="login_user" action="/login_user" method="post">
+            <span>Login</span>
+            <div></div>
+            <input class="LoginInput" id="loginInput"></input>
+            <span>Password</span>
+            <div></div>
+            <input type="password" oninput="CheckPassword()" class="PasswordInput" id="passwordInput"></input>
+            <span class="PasswordProblem" id="passwordProblem"></span>
+            <div></div>
+            <button input type="submit" name="submit" value="Send" class="LogReg">Login/Register</button>
+            </form>
+        </div>
+    <script src="/resources/js/LoginPage.js"></script>
+    </body>
+</html>
