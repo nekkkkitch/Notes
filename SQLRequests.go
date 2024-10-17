@@ -68,8 +68,9 @@ func CreateNote(userid int) int {
 		panic(err)
 	}
 	defer db.Close()
-	result, err = db.Exec("insert into notes(user_id, title, description) values('%v', '', '')", userid)
+	//result, err = db.Exec("insert into notes(user_id, title, description) values('%v', '', '')", userid)
 	if err != nil {
 		panic(err)
 	}
+	return 0
 }

@@ -5,9 +5,12 @@
         <script>
             async function callServer(){
                 let response = await fetch('/button-click', {
-                    method:'GET',
+                    method:'POST',
                     headers:{
                         'Content-type':'application/json'
+                    },
+                    body:{
+                        'message':'penisyu'
                     }
                 })
                     //вот тут через метод GET можно передавать данные из полученного response в переменные <body> ахуееееееееееееееееееееееееееееть 

@@ -10,11 +10,11 @@ func main() {
 	app := fiber.New()
 	app.Static("/files", "./resources")
 	app.Static("/", "./resources/index.html")
-	app.Get("/button-click", Button)
+	app.Post("/button-click", Button)
 	app.Listen(":8080")
 }
 
 func Button(c *fiber.Ctx) error {
-	fmt.Println("Knopka")
+	fmt.Println(c.Context())
 	return c.JSON(fiber.Map{"message": "Button click received"})
 }
