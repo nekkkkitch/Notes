@@ -1,0 +1,27 @@
+body{
+    background-color:#fff7db;
+}
+.RegisterThing{
+    border: 2px solid #918868;
+    border-radius: 5px;
+    background-color: #f7e296;
+    margin-left: 35%;
+    width: 30%;
+    margin-top: 50px;
+    height: 200px;
+    padding: 10px;
+}
+.LoginInput{
+    width: 95%;
+    margin-bottom: 30px;
+}
+.PasswordInput{
+    width: 95%;
+}
+.LogReg{
+    font-size: 3vw;
+    width: 90%;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}

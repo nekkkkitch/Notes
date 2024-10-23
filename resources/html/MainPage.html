@@ -9,25 +9,27 @@
     </head>
     <body>
         <div class="UpperPanel">
-            <button type="addNote" id="addNote"><img src="/resources/Images/plus.png" width="100%" height="100%"/></button>
-            <button type="addNote" id="userPng" onclick="ShowPanel()"><img src="/resources/Images/user.png" width="100%" height="100%"/></button>
+            <button type="addNote" id="addNote"><img src="/resources/imgs/plus.png" width="100%" height="100%"/></button>
+            <button type="addNote" id="userPng" onclick="ShowPanel()"><img src="/resources/imgs/user.png" width="100%" height="100%"/></button>
             <hr color="gray" class="UpperPanelLine"/>
         </div>
         <div class="popup" id="popupMenu">
-            <a href="/login"><div class="popupText">Войти</div></a>
-            <div class="popupText">Настройки</div>
-            <div class="popupText">Выйти</div>
+            <a href="/login"><div class="popupText">Log in</div></a>
+            <a href="/register"><div class="popupText">Reg in</div></a>
+            <div class="popupText">Setting</div>
+            <a href="/exit"><div class="popupText">Exit</div></a>
         </div>
+        <span id="status"></span>
         <div class="Note">
             <div class="NoteInside">
                 <span style="white-space: pre-line" class="NoteTitle"><b>Title</b></span>
                 <div></div>
                 <span style="white-space: pre-line" class="NoteDescription"></span>
             </div>
-            <div class="Images">
-                <img src="/resources/Images/pencil.png" class="Pencil"/>
+            <div class="imgs">
+                <img src="/resources/imgs/pencil.png" class="Pencil"/>
                 <br clear="all"/>
-                <img src="/resources/Images/trashcan.png" class="Trashcan"/>
+                <img src="/resources/imgs/trashcan.png" class="Trashcan"/>
             </div>
         </div>
         <script src="/resources/js/MainPage.js"></script>

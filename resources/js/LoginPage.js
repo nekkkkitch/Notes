@@ -1,48 +1,34 @@
 var passwordInput=document.getElementById("passwordInput");
 var passwordProblem=document.getElementById("passwordProblem");
+var loginProblem = document.getElementById("loginProblem")
 var passwordStrength=0;
+var smalllat = "qwertyuiopasdfghjklzxcvbnm"
+var biglat = "QWERTYUIOPASDFGHJKLZXCVBNM"
+var nums = "1234567890"
+var specs = "!@#$%^&*()"
+var loginAlph = smalllat+biglat+nums
+var passwordAlph = loginAlph+specs
 
-
-function CheckPassword(){
-    password = document.getElementById("passwordInput").value;
-    if (password.length > 16){
-        passwordProblem.textContent="Too much characters";
-        return;
+async function SendLoginData(){
+    var login = document.getElementById("loginInput").value
+    var password = document.getElementById("passwordInput").value
+    let response = await fetch('/login-user', {
+        method:'POST',
+        headers:{
+            'Content-type':'application/json'
+        },
+        body: JSON.stringify({"login":login,"password":password})
+    })
+    let commit = await response.json()
+    if(commit.status != "gut"){
+        loginProblem.textContent=commit.status
     }
-    if(password.length < 8){
-        passwordProblem.textContent="Not enough characters";
-        return;
+    else{
+        var accessToken = commit.accessToken
+        var refreshToken = commit.refreshToken
+        document.cookie = encodeURIComponent("accessToken") + "=" + encodeURIComponent(accessToken)
+        document.cookie = encodeURIComponent("refreshToken") + "=" + encodeURIComponent(refreshToken)
+        window.location.replace("http://localhost:8080")
     }
-    var passwordHasNums = false;
-    var passwordHasSmallAlph = false;
-    var passwordHasBigAlph = false;
-    var passwordHasSpecs = false;
-    for(var i=0;i<password.length;i++){
-        if(password[i].match(/[a-z]/)){
-            passwordHasSmallAlph = true;
-        }
-        if(password[i].match(/[A-Z]/)){
-            passwordHasBigAlph = true;
-        }
-        if(password[i].match(/[0-9]/)){
-            passwordHasNums = true;
-        }
-        if(password[i].match(/[!@#$%^&*()]/i)){
-            passwordHasSpecs = true;
-        }
-    }
-    passwordStrength=0;
-    if(passwordHasBigAlph){
-        passwordStrength+=1;
-    }
-    if(passwordHasSmallAlph){
-        passwordStrength+=1;
-    }
-    if(passwordHasNums){
-        passwordStrength+=1;
-    }
-    if(passwordHasSpecs){
-        passwordStrength+=2;
-    }
-    passwordProblem.textContent="Password strength is "+(passwordStrength*20).toString()+"% strong";
 }
+
