@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -137,14 +138,15 @@ func GetNotes(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "User is not identified"})
 	}
 	accessToken := headers["X-Access-Token"][0]
-	status := IsTokenValid(accessToken)
+	claims := jwt.MapClaims{}
+	claims, status := IsTokenValid(accessToken)
 
 	switch status {
 	case "Invalid token":
 		return c.JSON(fiber.Map{"status": status})
 	case "Expired token":
 		refreshToken := headers["X-Refresh-Token"][0]
-		refreshTokenStatus := IsTokenValid(refreshToken)
+		_, refreshTokenStatus := IsTokenValid(refreshToken)
 		switch refreshTokenStatus {
 		case "Invalid token":
 			return c.JSON(fiber.Map{"status": status})
@@ -152,54 +154,52 @@ func GetNotes(c *fiber.Ctx) error {
 			return c.JSON(fiber.Map{"status": status})
 			//заставить пользоватея перезаходить
 		case "":
-			id := GetUserIDFromToken(accessToken)
+			id := GetUserIDFromToken(claims)
 			access, refresh := GenerateTokensForUser(id)
 			PutRefreshToken(id, refresh)
 			notes := GetNotesFromDB(id)
-			return c.JSON(fiber.Map{"status": "Success with tokens", "accessToken": access, "refreshToken": refresh, "notes": notes})
+			jsonedNotes, err := json.Marshal(notes)
+			if err != nil {
+				panic(err)
+			}
+			return c.JSON(fiber.Map{"status": "Success with tokens", "accessToken": access, "refreshToken": refresh, "notes": jsonedNotes})
 			//получить список нотесов из бд и вернуть вместе с новой парой токенов
 		}
 	case "":
-		id := GetUserIDFromToken(accessToken)
+		id := GetUserIDFromToken(claims)
 		notes := GetNotesFromDB(id)
-		return c.JSON(fiber.Map{"status": "Success", "notes": notes})
+		jsonedNotes, err := json.Marshal(notes)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(jsonedNotes)
+		return c.JSON(fiber.Map{"status": "Success", "notes": jsonedNotes})
 		//получить список нотесов из бд и вернуть
 	}
 	return c.JSON(fiber.Map{"status": "Чтото пошло не так. Сильно"})
 }
 
 // проверка токена на валидность и на срок годности, возвращает соответствующие статусы
-func IsTokenValid(token string) string {
+func IsTokenValid(token string) (jwt.MapClaims, string) {
 	claims := jwt.MapClaims{}
 	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
 		return publicKey, nil
 	})
 	if err != nil {
-		panic(err)
+		switch {
+		case errors.Is(err, jwt.ErrTokenExpired):
+			return claims, "Expired token"
+		case errors.Is(err, jwt.ErrSignatureInvalid) || errors.Is(err, jwt.ErrTokenUnverifiable):
+			return claims, "Invalid token"
+		default:
+			panic(err)
+		}
 	}
-	var expirationDate time.Time
-	switch exp := claims["exp"].(type) {
-	case float64:
-		expirationDate = time.Unix(int64(exp), 0)
-	case json.Number:
-		v, _ := exp.Int64()
-		expirationDate = time.Unix(v, 0)
-	}
-	if expirationDate.Before(time.Now()) {
-		return "Expired token"
-	}
-	return ""
+	return claims, ""
 }
 
 // возвращает id пользователя на основе токена
-func GetUserIDFromToken(token string) int {
-	claims := jwt.MapClaims{}
-	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
-		return publicKey, nil
-	})
-	if err != nil {
-		panic(err)
-	}
+func GetUserIDFromToken(claims jwt.MapClaims) int {
 	idString := claims["sub"].(string)
 	id, err := strconv.Atoi(idString)
 	if err != nil {
@@ -220,9 +220,12 @@ func GetNotesFromDB(id int) []Note {
 	if err != nil {
 		panic(err)
 	}
+	defer res.Close()
 	for res.Next() {
 		note := Note{}
-		res.Scan(note)
+		if err := res.Scan(&note.ID, &note.Title, &note.Description, &note.UserID); err != nil{
+			panic(err)
+		}
 		notes = append(notes, note)
 	}
 	return notes

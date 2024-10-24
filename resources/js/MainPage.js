@@ -1,3 +1,12 @@
+class Note{
+    constructor(id, title, description, user_id){
+        this.id = id
+        this.title = title
+        this.description = description
+        this.user_id = user_id
+    }
+}
+
 document.getElementById("popupMenu").hidden = true;
 GetNotes()
 
@@ -32,12 +41,18 @@ async function GetNotes(){
             var refreshToken = commit.refreshToken
             document.cookie = encodeURIComponent("accessToken") + "=" + encodeURIComponent(accessToken)
             document.cookie = encodeURIComponent("refreshToken") + "=" + encodeURIComponent(refreshToken)
-            alert(commit.notes)
+            ParseNotes(commit.notes)
             break
-            //как то выкорчевать из коммита список нотесов и вывести(для вывода нужна отдельная функция)
         case "Success":
-            alert(commit.notes)
+            ParseNotes(commit.notes)
             break
+    }
+}
+
+function ParseNotes(notes){
+    var parsedNotes =JSON.parse(atob(notes))
+    for(let i = 0; i < parsedNotes.length; i++){
+        console.log(parsedNotes[i].Title + ": " + parsedNotes[i].Description)
     }
 }
 
