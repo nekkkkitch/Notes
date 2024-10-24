@@ -3,12 +3,14 @@ package main
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	fiber "github.com/gofiber/fiber/v2"
@@ -35,10 +37,26 @@ type Note struct {
 	User        User
 }
 
+type Status string
+
+/*
+const (
+
+	InvalidToken      Status = "Invalid token"
+	ExpiredToken      Status = "Expired token"
+	WrongLogin        Status = "Wrong login"
+	WrongPassword     Status = "Wrong password"
+	NonIdentifiedUser Status = "User is not identified"
+	NonExistentUser   Status = "User does not exist"
+	OkayStatus        Status = "OKAY"
+
+)
+*/
 var (
-	dblog string
-	key   *rsa.PrivateKey
-	db    *gorm.DB
+	dblog     string
+	key       *rsa.PrivateKey
+	publicKey *rsa.PublicKey
+	db        *gorm.DB
 )
 
 const (
@@ -52,20 +70,24 @@ func init() {
 		panic(err)
 	}
 	dblog, _ = os.LookupEnv("dblog")
-	key, _ = rsa.GenerateKey(rand.Reader, 2048)
+	GetKey()
+	publicKey = &key.PublicKey
 	Migrate()
 }
 
 // aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 func main() {
 	app := fiber.New()
-	app.Static("/resources", "./resources", fiber.Static{CacheDuration: -1 * time.Second})
+
+	app.Static("/resources", "./resources", fiber.Static{CacheDuration: time.Minute})
 	app.Static("/", "./resources/html/MainPage.html")
 	app.Static("/login", "./resources/html/LoginPage.html")
 	app.Static("/register", "./resources/html/RegisterPage.html")
+
 	app.Post("/login-user", LoginUser)
 	app.Post("/register-user", RegisterUser)
 	app.Get("/get-notes", GetNotes)
+
 	app.Listen(":8080")
 }
 
@@ -108,16 +130,20 @@ func RegisterUser(c *fiber.Ctx) error {
 // если с рефрешем всё ок - создает новую пару токенов и возвращает список нотесов. если с аксессом всё ок - возвращает список нотесов
 func GetNotes(c *fiber.Ctx) error {
 	headers := c.GetReqHeaders()
-	if len(headers["x-access-token"]) == 0 {
-		return c.JSON(fiber.Map{"status": "Log in pls"})
+	if len(headers["X-Access-Token"]) == 0 {
+		return c.JSON(fiber.Map{"status": "User is not identified"})
 	}
-	accessToken := headers["x-access-token"][0]
+	if headers["X-Access-Token"][0] == "" {
+		return c.JSON(fiber.Map{"status": "User is not identified"})
+	}
+	accessToken := headers["X-Access-Token"][0]
 	status := IsTokenValid(accessToken)
+
 	switch status {
 	case "Invalid token":
 		return c.JSON(fiber.Map{"status": status})
 	case "Expired token":
-		refreshToken := headers["x-refresh-token"][0]
+		refreshToken := headers["X-Refresh-Token"][0]
 		refreshTokenStatus := IsTokenValid(refreshToken)
 		switch refreshTokenStatus {
 		case "Invalid token":
@@ -145,16 +171,21 @@ func GetNotes(c *fiber.Ctx) error {
 // проверка токена на валидность и на срок годности, возвращает соответствующие статусы
 func IsTokenValid(token string) string {
 	claims := jwt.MapClaims{}
-	parsedToken, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
-		return nil, nil
+	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		return publicKey, nil
 	})
 	if err != nil {
 		panic(err)
 	}
-	if !parsedToken.Valid {
-		return "Invalid token"
+	var expirationDate time.Time
+	switch exp := claims["exp"].(type) {
+	case float64:
+		expirationDate = time.Unix(int64(exp), 0)
+	case json.Number:
+		v, _ := exp.Int64()
+		expirationDate = time.Unix(v, 0)
 	}
-	if claims["exp"].(time.Time).After(time.Now()) {
+	if expirationDate.Before(time.Now()) {
 		return "Expired token"
 	}
 	return ""
@@ -164,12 +195,17 @@ func IsTokenValid(token string) string {
 func GetUserIDFromToken(token string) int {
 	claims := jwt.MapClaims{}
 	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
-		return nil, nil
+		return publicKey, nil
 	})
 	if err != nil {
 		panic(err)
 	}
-	return claims["sub"].(int)
+	idString := claims["sub"].(string)
+	id, err := strconv.Atoi(idString)
+	if err != nil {
+		panic(fmt.Sprintf("%v, idString is %v", err, idString))
+	}
+	return id
 }
 
 // получает по id список нотесов
@@ -214,14 +250,14 @@ func AddNewUser(user User) int {
 // В access токене лежит user.ID
 // В refresh токене лежит только дата смерти
 func GenerateTokensForUser(userid int) (string, string) {
-	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodRS512, jwt.RegisteredClaims{
+	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(accessTokenExpiration)),
 		Subject:   strconv.Itoa(userid),
 	}).SignedString(key)
 	if err != nil {
 		panic(err)
 	}
-	refreshToken, err := jwt.NewWithClaims(jwt.SigningMethodRS512, jwt.RegisteredClaims{
+	refreshToken, err := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(refreshTokenExpiration)),
 	}).SignedString(key)
 	if err != nil {
@@ -242,7 +278,7 @@ func PutRefreshToken(userid int, refreshToken string) {
 	if err != nil {
 		panic(err)
 	}
-	log.Println(res)
+	log.Printf("Update result+%v", res)
 }
 
 // Проверяет на существование логина, затем на соответствие логина и пароля
@@ -258,10 +294,7 @@ func CheckLoginAndPassword(user User) string {
 	row := db.QueryRow(fmt.Sprintf("SELECT password FROM users where login = '%v' limit 1", user.Login))
 	var password []byte
 	row.Scan(&password)
-	log.Println(password)
-	log.Println(user.Password)
 	err = bcrypt.CompareHashAndPassword(password, []byte(user.Password))
-	log.Println(err)
 	if err == nil {
 		return "gut"
 	}
@@ -274,6 +307,39 @@ func IsLoginOccupied(requestLogin string) bool {
 	var user User
 	db.First(&user, "login = ?", requestLogin)
 	return user.Login != ""
+}
+
+func GetKey() {
+	privateKeyString, _ := os.LookupEnv("key")
+	if privateKeyString == "" {
+		privateKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+		keyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
+		privateKeyString = fmt.Sprintf("%v", keyBytes)
+		err := os.Setenv("key", privateKeyString) //не записывает в go.env на самом деле. надо фиксить както
+		if err != nil {
+			panic(err)
+		}
+	}
+	keyBytes := convertStringToBytesSlice(privateKeyString)
+	var err error
+	key, err = x509.ParsePKCS1PrivateKey(keyBytes)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func convertStringToBytesSlice(line string) []byte {
+	line = strings.Trim(line, "[]")
+	parts := strings.Split(line, " ")
+	var bytes []byte
+	for _, part := range parts {
+		num, err := strconv.Atoi(part)
+		if err != nil {
+			panic(err)
+		}
+		bytes = append(bytes, byte(num))
+	}
+	return bytes
 }
 
 // Мигрирование таблицы(создаёт в БД таблицы users и notes на основе соответствующих структур)

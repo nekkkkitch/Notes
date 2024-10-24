@@ -1,13 +1,6 @@
 var passwordInput=document.getElementById("passwordInput");
 var passwordProblem=document.getElementById("passwordProblem");
 var loginProblem = document.getElementById("loginProblem")
-var passwordStrength=0;
-var smalllat = "qwertyuiopasdfghjklzxcvbnm"
-var biglat = "QWERTYUIOPASDFGHJKLZXCVBNM"
-var nums = "1234567890"
-var specs = "!@#$%^&*()"
-var loginAlph = smalllat+biglat+nums
-var passwordAlph = loginAlph+specs
 
 async function SendLoginData(){
     var login = document.getElementById("loginInput").value

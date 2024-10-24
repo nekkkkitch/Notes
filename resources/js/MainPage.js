@@ -12,25 +12,32 @@ async function GetNotes(){
         method:'GET',
         headers:{
             'x-access-token':accessToken,
-            'x-refresh-token':refreshToken,
-        },
+            'x-refresh-token':refreshToken
+        }
     })
     let commit = await response.json()
     var status = document.getElementById("status")
     switch(commit.status){
+        case "User is not identified":
+            status.textContent = "Вы не вошли в аккаунт"
+            break
         case "Invalid token":
             status.textContent = "Токен был изменён, перезайдите в аккаунт"
+            break
         case "Expired token":
             status.textContent = "Истёк срок логина. Авторизируйтесь снова"
+            break
         case "Success with tokens":
             var accessToken = commit.accessToken
             var refreshToken = commit.refreshToken
             document.cookie = encodeURIComponent("accessToken") + "=" + encodeURIComponent(accessToken)
             document.cookie = encodeURIComponent("refreshToken") + "=" + encodeURIComponent(refreshToken)
             alert(commit.notes)
+            break
             //как то выкорчевать из коммита список нотесов и вывести(для вывода нужна отдельная функция)
         case "Success":
             alert(commit.notes)
+            break
     }
 }
 
