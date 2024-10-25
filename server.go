@@ -38,21 +38,18 @@ type Note struct {
 	User        User
 }
 
-type Status string
-
-/*
+// Осторожно! В js действия основаны на названии этих ошибок, поэтому при их изменении придется лезть в js
+// todo: переделать передаваемые клиенту значения с string на int
 const (
-
-	InvalidToken      Status = "Invalid token"
-	ExpiredToken      Status = "Expired token"
-	WrongLogin        Status = "Wrong login"
-	WrongPassword     Status = "Wrong password"
-	NonIdentifiedUser Status = "User is not identified"
-	NonExistentUser   Status = "User does not exist"
-	OkayStatus        Status = "OKAY"
-
+	InvalidToken      = "Invalid token"
+	ExpiredToken      = "Expired token"
+	WrongLogin        = "Wrong login"
+	WrongPassword     = "Wrong password"
+	NonIdentifiedUser = "User is not identified"
+	NonExistentUser   = "User does not exist"
+	OkayStatus        = "OKAY"
 )
-*/
+
 var (
 	dblog     string
 	key       *rsa.PrivateKey
@@ -65,7 +62,7 @@ const (
 	refreshTokenExpiration = time.Hour * 2
 )
 
-// Получаем из env файла параметры для работы БД и ключик секретик
+// Получаем из env файла параметры для работы БД и секретный ключ
 func init() {
 	if err := godotenv.Load("go.env"); err != nil {
 		panic(err)
@@ -76,7 +73,9 @@ func init() {
 	Migrate()
 }
 
-// aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+//*** Серверная часть ***//
+
+// Запуск сервера. /resources загружает все необходимые для функционирования страниц файлы и не предполагается для использования юзером.
 func main() {
 	app := fiber.New()
 
@@ -88,11 +87,12 @@ func main() {
 	app.Post("/login-user", LoginUser)
 	app.Post("/register-user", RegisterUser)
 	app.Get("/get-notes", GetNotes)
+	app.Delete("/delete-note", DeleteNote)
 
 	app.Listen(":8080")
 }
 
-// Логинит юзера, возвращает мапу с status:wrong password/login если неправильные логин или пароль
+// Логинит юзера, возвращает мапу с status:wrong password/login если неправильные логин или пароль.
 // Если всё нормально, возвращает status:gut и токены, а также обновляет рефреш токен в бд
 func LoginUser(c *fiber.Ctx) error {
 	var user User
@@ -100,16 +100,16 @@ func LoginUser(c *fiber.Ctx) error {
 	if err != nil {
 		panic(err)
 	}
-	status := CheckLoginAndPassword(user)
-	if status == "gut" {
-		access, refresh := GenerateTokensForUser(user.ID)
-		PutRefreshToken(user.ID, refresh)
+	status, user_id := CheckLoginAndPassword(user)
+	if status == OkayStatus {
+		access, refresh := GenerateTokensForUser(user_id)
+		PutRefreshToken(user_id, refresh)
 		return c.JSON(fiber.Map{"status": status, "accessToken": access, "refreshToken": refresh})
 	}
 	return c.JSON(fiber.Map{"status": status})
 }
 
-// Пытается зарегать пользователя, в случае, если логин занят, возвращает мапу в которой это указано
+// Пытается зарегать пользователя, в случае, если логин занят, возвращает мапу в которой это указано.
 // Если не занят, возвращает мапу с тем, что не занято, а также access и refresh токеном
 func RegisterUser(c *fiber.Ctx) error {
 	var user User
@@ -126,10 +126,27 @@ func RegisterUser(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"occupied": true})
 }
 
-// Попытка вернуть список нотесов, сначала проверяет access токен на валидность и на срок годности, если невалиден - возвращает ошибку
-// если истёк - проверяет рефреш токен, если он невалиден - возвращает ошибку, если истёк - возвращает ошибку(надо перезайти в аккаунт)
-// если с рефрешем всё ок - создает новую пару токенов и возвращает список нотесов. если с аксессом всё ок - возвращает список нотесов
 func GetNotes(c *fiber.Ctx) error {
+	return CheckTokensAndDoFunction(c, GetAndMarshalNotes)
+}
+
+func DeleteNote(c *fiber.Ctx) error {
+	var requestBody map[string]string
+	err := json.Unmarshal(c.Body(), &requestBody)
+	if err != nil {
+		panic(err)
+	}
+	noteID, err := strconv.Atoi(requestBody["note_id"])
+	log.Printf("Note to delete: %v\n", noteID)
+	if err != nil {
+		panic(err)
+	}
+	return CheckTokensAndDoFunction(c, DeleteNoteFromDB, noteID)
+}
+
+// Позволяет перед выполнением любого действия проверять токены на валидность и создать респонс мапу, которая будет служить телом ответа.
+// Переданная функция наполнит мапу дополнительной информацией. В функцию можно закинуть любое количество интовых параметров, user_id при этом всегда будет последним.
+func CheckTokensAndDoFunction(c *fiber.Ctx, function func(fiber.Map, ...int) fiber.Map, params ...int) error {
 	headers := c.GetReqHeaders()
 	if len(headers["X-Access-Token"]) == 0 {
 		return c.JSON(fiber.Map{"status": "User is not identified"})
@@ -138,124 +155,59 @@ func GetNotes(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "User is not identified"})
 	}
 	accessToken := headers["X-Access-Token"][0]
-	claims := jwt.MapClaims{}
+	claims := jwt.MapClaims{} // ^_^
 	claims, status := IsTokenValid(accessToken)
 
 	switch status {
-	case "Invalid token":
+	case InvalidToken:
 		return c.JSON(fiber.Map{"status": status})
-	case "Expired token":
+	case ExpiredToken:
 		refreshToken := headers["X-Refresh-Token"][0]
 		_, refreshTokenStatus := IsTokenValid(refreshToken)
 		switch refreshTokenStatus {
-		case "Invalid token":
+		case InvalidToken:
 			return c.JSON(fiber.Map{"status": status})
-		case "Expired token":
+		case ExpiredToken:
 			return c.JSON(fiber.Map{"status": status})
-			//заставить пользоватея перезаходить
-		case "":
-			id := GetUserIDFromToken(claims)
-			access, refresh := GenerateTokensForUser(id)
-			PutRefreshToken(id, refresh)
-			notes := GetNotesFromDB(id)
-			jsonedNotes, err := json.Marshal(notes)
-			if err != nil {
-				panic(err)
-			}
-			return c.JSON(fiber.Map{"status": "Success with tokens", "accessToken": access, "refreshToken": refresh, "notes": jsonedNotes})
-			//получить список нотесов из бд и вернуть вместе с новой парой токенов
+		case OkayStatus:
+			user_id := GetUserIDFromToken(claims)
+			access, refresh := GenerateTokensForUser(user_id)
+			PutRefreshToken(user_id, refresh)
+			responseBody := fiber.Map{"status": "Success with tokens", "accessToken": access, "refreshToken": refresh}
+			params = append(params, user_id)
+			responseBody = function(responseBody, params...)
+			return c.JSON(responseBody)
 		}
-	case "":
-		id := GetUserIDFromToken(claims)
-		notes := GetNotesFromDB(id)
-		jsonedNotes, err := json.Marshal(notes)
-		if err != nil {
-			panic(err)
-		}
-		fmt.Println(jsonedNotes)
-		return c.JSON(fiber.Map{"status": "Success", "notes": jsonedNotes})
-		//получить список нотесов из бд и вернуть
+	case OkayStatus:
+		user_id := GetUserIDFromToken(claims)
+		responseBody := fiber.Map{"status": "Success"}
+		params = append(params, user_id)
+		responseBody = function(responseBody, params...)
+		return c.JSON(responseBody)
 	}
 	return c.JSON(fiber.Map{"status": "Чтото пошло не так. Сильно"})
 }
 
-// проверка токена на валидность и на срок годности, возвращает соответствующие статусы
-func IsTokenValid(token string) (jwt.MapClaims, string) {
-	claims := jwt.MapClaims{}
-	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
-		return publicKey, nil
-	})
+func GetAndMarshalNotes(response fiber.Map, params ...int) fiber.Map {
+	notes := GetNotesFromDB(params[0])
+	jsonedNotes, err := json.Marshal(notes)
 	if err != nil {
-		switch {
-		case errors.Is(err, jwt.ErrTokenExpired):
-			return claims, "Expired token"
-		case errors.Is(err, jwt.ErrSignatureInvalid) || errors.Is(err, jwt.ErrTokenUnverifiable):
-			return claims, "Invalid token"
-		default:
-			panic(err)
-		}
+		panic(err)
 	}
-	return claims, ""
+	response["notes"] = jsonedNotes
+	log.Printf("GetNotes response: %v\n", response)
+	return response
 }
 
-// возвращает id пользователя на основе токена
-func GetUserIDFromToken(claims jwt.MapClaims) int {
-	idString := claims["sub"].(string)
-	id, err := strconv.Atoi(idString)
-	if err != nil {
-		panic(fmt.Sprintf("%v, idString is %v", err, idString))
-	}
-	return id
-}
-
-// получает по id список нотесов
-func GetNotesFromDB(id int) []Note {
-	notes := []Note{}
-	db, err := sql.Open("postgres", dblog)
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
-	res, err := db.Query(fmt.Sprintf("select * from notes where user_id = %v", id))
-	if err != nil {
-		panic(err)
-	}
-	defer res.Close()
-	for res.Next() {
-		note := Note{}
-		if err := res.Scan(&note.ID, &note.Title, &note.Description, &note.UserID); err != nil{
-			panic(err)
-		}
-		notes = append(notes, note)
-	}
-	return notes
-}
-
-// Добавляет в БД нового пользователя
-func AddNewUser(user User) int {
-	db, err := sql.Open("postgres", dblog)
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
-	userPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-	if err != nil {
-		panic(err)
-	}
-	res := db.QueryRow(fmt.Sprintf("insert into users(login, password) values('%v', '%v') returning id", user.Login, string(userPassword)))
-	var id int
-	res.Scan(&id)
-	log.Printf("New user's id: %v\n", id)
-	return id
-}
+//*** Работа с токенами ***//
 
 // Создаём токены для пользователя, возвращает access и refresh токены в виде string
 // В access токене лежит user.ID
 // В refresh токене лежит только дата смерти
-func GenerateTokensForUser(userid int) (string, string) {
+func GenerateTokensForUser(user_id int) (string, string) {
 	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(accessTokenExpiration)),
-		Subject:   strconv.Itoa(userid),
+		Subject:   strconv.Itoa(user_id),
 	}).SignedString(key)
 	if err != nil {
 		panic(err)
@@ -269,48 +221,37 @@ func GenerateTokensForUser(userid int) (string, string) {
 	return accessToken, refreshToken
 }
 
-// Обновляет рефреш токен пользователю
-func PutRefreshToken(userid int, refreshToken string) {
-	db, err := sql.Open("postgres", dblog)
+// проверка токена на валидность и на срок годности, возвращает соответствующие статусы
+func IsTokenValid(token string) (jwt.MapClaims, string) {
+	claims := jwt.MapClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		return publicKey, nil
+	})
 	if err != nil {
-		panic(err)
+		switch {
+		case errors.Is(err, jwt.ErrTokenExpired):
+			return claims, ExpiredToken
+		case errors.Is(err, jwt.ErrSignatureInvalid) || errors.Is(err, jwt.ErrTokenUnverifiable):
+			return claims, InvalidToken
+		default:
+			panic(err)
+		}
 	}
-	defer db.Close()
-	refresh := []byte(refreshToken)
-	res, err := db.Exec(fmt.Sprintf("update users set refresh_token = '%v' where id = '%v'", refresh, userid))
-	if err != nil {
-		panic(err)
-	}
-	log.Printf("Update result+%v", res)
+	return claims, OkayStatus
 }
 
-// Проверяет на существование логина, затем на соответствие логина и пароля
-func CheckLoginAndPassword(user User) string {
-	db, err := sql.Open("postgres", dblog)
+// возвращает id пользователя на основе токена
+func GetUserIDFromToken(claims jwt.MapClaims) int {
+	idString := claims["sub"].(string)
+	user_id, err := strconv.Atoi(idString)
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("%v, idString is %v", err, idString))
 	}
-	defer db.Close()
-	if !IsLoginOccupied(user.Login) {
-		return "Wrong login"
-	}
-	row := db.QueryRow(fmt.Sprintf("SELECT password FROM users where login = '%v' limit 1", user.Login))
-	var password []byte
-	row.Scan(&password)
-	err = bcrypt.CompareHashAndPassword(password, []byte(user.Password))
-	if err == nil {
-		return "gut"
-	}
-	return "Wrong password"
-
+	log.Printf("ID from token: %v\n", user_id)
+	return user_id
 }
 
-// Проверяет, занят ли логин, возвращает true, если занят и false, если нет
-func IsLoginOccupied(requestLogin string) bool {
-	var user User
-	db.First(&user, "login = ?", requestLogin)
-	return user.Login != ""
-}
+//*** Колдунства для получения из файла и сохранения в нем секретного ключа ***//
 
 func GetKey() {
 	privateKeyString, _ := os.LookupEnv("key")
@@ -345,6 +286,8 @@ func convertStringToBytesSlice(line string) []byte {
 	return bytes
 }
 
+//*** Взаимодействие с БД ***//
+
 // Мигрирование таблицы(создаёт в БД таблицы users и notes на основе соответствующих структур)
 func Migrate() {
 	var err error
@@ -356,10 +299,110 @@ func Migrate() {
 	db.AutoMigrate(&Note{})
 }
 
+// Проверяет, занят ли логин, возвращает true, если занят и false, если нет
+func IsLoginOccupied(requestLogin string) bool {
+	var user User
+	db.First(&user, "login = ?", requestLogin)
+	return user.Login != ""
+}
+
+// Проверяет на существование логина, затем на соответствие логина и пароля
+func CheckLoginAndPassword(user User) (string, int) {
+	db, err := sql.Open("postgres", dblog)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+	if !IsLoginOccupied(user.Login) {
+		return WrongLogin, -1
+	}
+	row := db.QueryRow(fmt.Sprintf("SELECT id, password FROM users where login = '%v' limit 1", user.Login))
+	var user_id int
+	var password []byte
+	row.Scan(&user_id, &password)
+	err = bcrypt.CompareHashAndPassword(password, []byte(user.Password))
+	if err == nil {
+		return OkayStatus, user_id
+	}
+	return WrongPassword, -1
+}
+
+// Обновляет рефреш токен пользователю
+func PutRefreshToken(user_id int, refreshToken string) {
+	db, err := sql.Open("postgres", dblog)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+	refresh := []byte(refreshToken)
+	res, err := db.Exec(fmt.Sprintf("update users set refresh_token = '%v' where id = '%v'", refresh, user_id))
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("Update result+%v", res)
+}
+
+// Добавляет в БД нового пользователя
+func AddNewUser(user User) int {
+	db, err := sql.Open("postgres", dblog)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+	userPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		panic(err)
+	}
+	res := db.QueryRow(fmt.Sprintf("insert into users(login, password) values('%v', '%v') returning id", user.Login, string(userPassword)))
+	var user_id int
+	res.Scan(&user_id)
+	log.Printf("New user's id: %v\n", user_id)
+	return user_id
+}
+
+// получает по id список нотесов
+func GetNotesFromDB(user_id int) []Note {
+	db, err := sql.Open("postgres", dblog)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+	notes := []Note{}
+	res, err := db.Query(fmt.Sprintf("select * from notes where user_id = %v", user_id))
+	if err != nil {
+		panic(err)
+	}
+	defer res.Close()
+	for res.Next() {
+		note := Note{}
+		if err := res.Scan(&note.ID, &note.Title, &note.Description, &note.UserID); err != nil {
+			panic(err)
+		}
+		notes = append(notes, note)
+	}
+	log.Printf("Notes to return: %v\n", notes)
+	return notes
+}
+
+func DeleteNoteFromDB(response fiber.Map, params ...int) fiber.Map {
+	db, err := sql.Open("postgres", dblog)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+	noteId := params[0]
+	res, err := db.Exec(fmt.Sprintf("delete from notes where id=%v", noteId))
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("Note delete result: %v\n", res)
+	return response
+}
+
 /*⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣤⠤⠤⠤⣤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⡤⠾⠯⠷⢦⣄⣀⠀⠀⣠⠞⠋⠀⠀⠀⠀⠀⠈⠉⠹⢷⣆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⡼⠋⠁⠀⠀⠀⠀⠀⠈⠉⠓⢾⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠻⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⠏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢷⣠⣾⣧⠀⣸⣿⣦⠀⠀⠀⠀⠀⠘⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⠏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢷⣠⣾⣧⠀⣸⣿⣦⠀⠀⠀⠀⠀⠘⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀привет!⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⡟⠀⠀⠀⠀⠀⠀⠀⣶⣶⣦⣄⠀⠀⠀⠘⣿⣿⣿⣶⣿⣿⣿⡇⠀⠀⠀⠀⠸⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⡇⠀⠀⠀⠀⢰⣷⣄⣹⣿⣿⣿⣷⡀⠀⠀⢸⣿⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⢿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣽⠀⠀⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⣿⡇⠀⠀⢸⣿⣿⣿⣿⣿⡿⠁⠀⠀⠀⠀⣸⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀

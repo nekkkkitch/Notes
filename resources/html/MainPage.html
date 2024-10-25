@@ -20,16 +20,18 @@
             <a href="/exit"><div class="popupText">Exit</div></a>
         </div>
         <span id="status"></span>
-        <div class="Note">
-            <div class="NoteInside">
-                <span style="white-space: pre-line" class="NoteTitle"><b>Title</b></span>
-                <div></div>
-                <span style="white-space: pre-line" class="NoteDescription"></span>
-            </div>
-            <div class="imgs">
-                <img src="/resources/imgs/pencil.png" class="Pencil"/>
-                <br clear="all"/>
-                <img src="/resources/imgs/trashcan.png" class="Trashcan"/>
+        <div id="notes">
+            <div class="Note" id="baseNote">
+                <div class="NoteInside" id="noteInside">
+                    <span style="white-space: pre-line" class="NoteTitle" id="noteTitle"><b>Title</b></span>
+                    <div></div>
+                    <span style="white-space: pre-line" class="NoteDescription" id="noteDescription"></span>
+                </div>
+                <div class="Imgs" id="imgs">
+                    <img src="/resources/imgs/pencil.png" class="Pencil" id="pencil" onclick="ChangeNote(this.id)"/>
+                    <br clear="all"/>
+                    <img src="/resources/imgs/trashcan.png" class="Trashcan" id="trashcan" onclick="DeleteNote(this.id)"/>
+                </div>
             </div>
         </div>
         <script src="/resources/js/MainPage.js"></script>

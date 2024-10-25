@@ -13,7 +13,7 @@ async function SendLoginData(){
         body: JSON.stringify({"login":login,"password":password})
     })
     let commit = await response.json()
-    if(commit.status != "gut"){
+    if(commit.status != "OKAY"){
         loginProblem.textContent=commit.status
     }
     else{

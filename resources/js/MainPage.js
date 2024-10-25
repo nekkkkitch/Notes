@@ -1,12 +1,3 @@
-class Note{
-    constructor(id, title, description, user_id){
-        this.id = id
-        this.title = title
-        this.description = description
-        this.user_id = user_id
-    }
-}
-
 document.getElementById("popupMenu").hidden = true;
 GetNotes()
 
@@ -26,34 +17,105 @@ async function GetNotes(){
     })
     let commit = await response.json()
     var status = document.getElementById("status")
+    if(CheckStatus(commit)){
+        ParseNotes(commit.notes)
+    }
+}
+
+async function AddNote(){
+    //послать запрос на сервер на создание пустого нотеса, респонсом получить id этого нотеса и перейти на страницу изменения нотеса
+    // с его id 
+}
+
+async function DeleteNote(id){
+    var accessToken = getCookie("accessToken")
+    var refreshToken = getCookie("refreshToken")
+    let response = await fetch('/delete-note', {
+        method:'DELETE',
+        headers:{
+            'x-access-token':accessToken,
+            'x-refresh-token':refreshToken
+        },
+        body: JSON.stringify({
+            'note_id':id
+        })
+    })
+    let commit = await response.json()
+    if(CheckStatus(commit)){
+        document.getElementById("Note#"+id).remove()
+    }
+    //послать запрос на сервер на удаление нотеса из бд
+    //если успешно удалилось, удалить тут
+}
+
+function CheckStatus(commit){
+    var status = document.getElementById("status")
     switch(commit.status){
         case "User is not identified":
             status.textContent = "Вы не вошли в аккаунт"
-            break
+            return false
         case "Invalid token":
             status.textContent = "Токен был изменён, перезайдите в аккаунт"
-            break
+            return false
         case "Expired token":
             status.textContent = "Истёк срок логина. Авторизируйтесь снова"
-            break
+            return false
         case "Success with tokens":
             var accessToken = commit.accessToken
             var refreshToken = commit.refreshToken
             document.cookie = encodeURIComponent("accessToken") + "=" + encodeURIComponent(accessToken)
             document.cookie = encodeURIComponent("refreshToken") + "=" + encodeURIComponent(refreshToken)
-            ParseNotes(commit.notes)
-            break
+            return true
         case "Success":
-            ParseNotes(commit.notes)
-            break
+            return true
     }
 }
 
+async function ChangeNote(id){
+    //открыть страницу изменения нотеса с его id
+}
+
 function ParseNotes(notes){
+    var noteList = document.getElementById("notes")
+    var note = document.querySelector('#baseNote')
     var parsedNotes =JSON.parse(atob(notes))
-    for(let i = 0; i < parsedNotes.length; i++){
-        console.log(parsedNotes[i].Title + ": " + parsedNotes[i].Description)
+    for(let i = 0; i < parsedNotes.length; i++){    
+        var clonnedNote = note.cloneNode(true)
+        clonnedNote.id="Note#"+parsedNotes[i].ID
+        for(let j = 0; j < clonnedNote.childNodes.length;j++){
+            switch (clonnedNote.childNodes[j].id){
+                case "noteInside":
+                    var noteInside = clonnedNote.childNodes[j]
+                    for(let k = 0; k < noteInside.childNodes.length;k++){
+                        switch(noteInside.childNodes[k].id){
+                            case "noteTitle":
+                                noteInside.childNodes[k].textContent = parsedNotes[i].Title
+                                break
+                            case "noteDescription":
+                                noteInside.childNodes[k].textContent = parsedNotes[i].Description
+                                break
+                        }
+                    }
+                    break
+                case "imgs":
+                    var imgs = clonnedNote.childNodes[j]
+                    for(let k = 0; k < imgs.childNodes.length;k++){
+                        switch(imgs.childNodes[k].id){
+                            case "pencil":
+                                imgs.childNodes[k].id = parsedNotes[i].ID
+                                break
+                            case "trashcan":
+                                imgs.childNodes[k].id = parsedNotes[i].ID
+                                break
+                        }
+                    }
+                break
+            }
+            
+        }
+        note.after(clonnedNote)
     }
+    note.remove()
 }
 
 function getCookie(cname) {
