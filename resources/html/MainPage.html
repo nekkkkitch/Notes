@@ -9,7 +9,7 @@
     </head>
     <body>
         <div class="UpperPanel">
-            <button type="addNote" id="addNote"><img src="/resources/imgs/plus.png" width="100%" height="100%"/></button>
+            <button type="addNote" id="addNote" onclick="GoToCreateNote()"><img src="/resources/imgs/plus.png" width="100%" height="100%"/></button>
             <button type="addNote" id="userPng" onclick="ShowPanel()"><img src="/resources/imgs/user.png" width="100%" height="100%"/></button>
             <hr color="gray" class="UpperPanelLine"/>
         </div>
@@ -17,7 +17,7 @@
             <a href="/login"><div class="popupText">Log in</div></a>
             <a href="/register"><div class="popupText">Reg in</div></a>
             <div class="popupText">Setting</div>
-            <a href="/exit"><div class="popupText">Exit</div></a>
+            <div class="popupText" onclick="Exit()">Exit</div>
         </div>
         <span id="status"></span>
         <div id="notes">

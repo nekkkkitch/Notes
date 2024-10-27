@@ -24,6 +24,8 @@ body{
     margin-bottom: 1vh;
     background-color: transparent;
     border: none;
+    resize: none;
+    overflow: hidden;
 }
 .DescriptionInput{
     width: 100%;

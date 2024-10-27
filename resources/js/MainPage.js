@@ -23,8 +23,7 @@ async function GetNotes(){
 }
 
 async function AddNote(){
-    //послать запрос на сервер на создание пустого нотеса, респонсом получить id этого нотеса и перейти на страницу изменения нотеса
-    // с его id 
+    window.location.replace("http://localhost:8080/addnote")
 }
 
 async function DeleteNote(id){
@@ -71,8 +70,12 @@ function CheckStatus(commit){
     }
 }
 
-async function ChangeNote(id){
-    //открыть страницу изменения нотеса с его id
+function ChangeNote(id){
+    window.location.replace("http://localhost:8080/note?id="+id)
+}
+
+function GoToCreateNote(){
+    window.location.replace("http://localhost:8080/addnote")
 }
 
 function ParseNotes(notes){
@@ -134,3 +137,8 @@ function getCookie(cname) {
     return "";
 }
 
+function Exit(){
+    document.cookie = encodeURIComponent("accessToken") + "=" + ""
+    document.cookie = encodeURIComponent("refreshToken") + "=" + ""
+    window.location.reload()
+}

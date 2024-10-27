@@ -8,14 +8,16 @@
         <title>Нотес!</title>
     </head>
     <body>
+        <span id="status"></span>
         <div class="NoteInside">
-            <input class="TitleInput" placeholder="Title"></input>
+            <textarea class="TitleInput" placeholder="Title" id="title"></textarea>
             <div></div>
-            <textarea class="DescriptionInput" placeholder="Description"></textarea>
+            <textarea class="DescriptionInput" placeholder="Description" id="description"></textarea>
             <div class="Buttons">
                 <a href="/"><button class="Cancel">Отмена</button></a>
-                <button class="Create">Создать</button>
+                <button class="Save changes" onclick="ChangeNote()">Создать</button>
             </div>
         </div>
+        <script src="/resources/js/NotePage.js"></script>
     </body>
 </html>

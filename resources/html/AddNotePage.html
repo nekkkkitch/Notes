@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+
+    <head>
+        <link rel="stylesheet" href="/resources/css/NotePage.css">
+        <meta charset="UTF-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <title>Нотес!</title>
+    </head>
+    <body>
+        <span id="status"></span>
+        <div class="NoteInside">
+            <textarea class="TitleInput" placeholder="Title" id="title"></textarea>
+            <div></div>
+            <textarea class="DescriptionInput" placeholder="Description" id="description"></textarea>
+            <div class="Buttons">
+                <a href="/"><button class="Cancel">Отмена</button></a>
+                <button class="Save changes" onclick="AddNote()">Создать</button>
+            </div>
+        </div>
+        <script src="/resources/js/AddNotePage.js"></script>
+    </body>
+</html>

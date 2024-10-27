@@ -83,10 +83,15 @@ func main() {
 	app.Static("/", "./resources/html/MainPage.html")
 	app.Static("/login", "./resources/html/LoginPage.html")
 	app.Static("/register", "./resources/html/RegisterPage.html")
+	app.Static("/note", "./resources/html/NotePage.html")
+	app.Static("/addnote", "./resources/html/AddNotePage.html")
 
 	app.Post("/login-user", LoginUser)
 	app.Post("/register-user", RegisterUser)
+	app.Post("/add-note", AddNote)
 	app.Get("/get-notes", GetNotes)
+	app.Get("/get-note", GetNote)
+	app.Put("/change-note", ChangeNote)
 	app.Delete("/delete-note", DeleteNote)
 
 	app.Listen(":8080")
@@ -130,6 +135,38 @@ func GetNotes(c *fiber.Ctx) error {
 	return CheckTokensAndDoFunction(c, GetAndMarshalNotes)
 }
 
+func GetNote(c *fiber.Ctx) error { // todo: добавить обработку на разрешение доступа по id пользователя
+	log.Printf("id of note to return: %v", c.Query("id"))
+	note_id, err := strconv.Atoi(c.Query("id"))
+	if err != nil {
+		return c.JSON(fiber.Map{"status": "bad id"})
+	}
+	return CheckTokensAndDoFunction(c, GetAndMarshalNote, note_id)
+}
+
+func AddNote(c *fiber.Ctx) error {
+	note := Note{}
+	err := json.Unmarshal(c.Body(), &note)
+	if err != nil {
+		return err
+	}
+	log.Printf("Request note to add: %v, %v\n", note.Title, note.Description)
+	return CheckTokensAndDoFunction(c, AddNoteToDB, note.Title, note.Description)
+}
+
+func ChangeNote(c *fiber.Ctx) error {
+	note := Note{}
+	err := json.Unmarshal(c.Body(), &note)
+	if err != nil {
+		return err
+	}
+	note_id, err := strconv.Atoi(c.Query("id"))
+	if err != nil {
+		return c.JSON(fiber.Map{"status": "bad id"})
+	}
+	return CheckTokensAndDoFunction(c, ChangeNoteInDB, note.Title, note.Description, note_id)
+}
+
 func DeleteNote(c *fiber.Ctx) error {
 	var requestBody map[string]string
 	err := json.Unmarshal(c.Body(), &requestBody)
@@ -145,8 +182,8 @@ func DeleteNote(c *fiber.Ctx) error {
 }
 
 // Позволяет перед выполнением любого действия проверять токены на валидность и создать респонс мапу, которая будет служить телом ответа.
-// Переданная функция наполнит мапу дополнительной информацией. В функцию можно закинуть любое количество интовых параметров, user_id при этом всегда будет последним.
-func CheckTokensAndDoFunction(c *fiber.Ctx, function func(fiber.Map, ...int) fiber.Map, params ...int) error {
+// Переданная функция наполнит мапу дополнительной информацией. В функцию можно закинуть любое количество параметров, user_id при этом будет всегда и всегда будет последним.
+func CheckTokensAndDoFunction(c *fiber.Ctx, function func(fiber.Map, ...interface{}) fiber.Map, params ...interface{}) error {
 	headers := c.GetReqHeaders()
 	if len(headers["X-Access-Token"]) == 0 {
 		return c.JSON(fiber.Map{"status": "User is not identified"})
@@ -155,7 +192,6 @@ func CheckTokensAndDoFunction(c *fiber.Ctx, function func(fiber.Map, ...int) fib
 		return c.JSON(fiber.Map{"status": "User is not identified"})
 	}
 	accessToken := headers["X-Access-Token"][0]
-	claims := jwt.MapClaims{} // ^_^
 	claims, status := IsTokenValid(accessToken)
 
 	switch status {
@@ -188,14 +224,64 @@ func CheckTokensAndDoFunction(c *fiber.Ctx, function func(fiber.Map, ...int) fib
 	return c.JSON(fiber.Map{"status": "Чтото пошло не так. Сильно"})
 }
 
-func GetAndMarshalNotes(response fiber.Map, params ...int) fiber.Map {
-	notes := GetNotesFromDB(params[0])
+func GetAndMarshalNotes(response fiber.Map, params ...interface{}) fiber.Map {
+	notes := GetNotesFromDB(params[0].(int))
 	jsonedNotes, err := json.Marshal(notes)
 	if err != nil {
 		panic(err)
 	}
 	response["notes"] = jsonedNotes
 	log.Printf("GetNotes response: %v\n", response)
+	return response
+}
+
+func GetAndMarshalNote(response fiber.Map, params ...interface{}) fiber.Map {
+	note := GetNoteFromDB(params[0].(int))
+	if note.ID == 0 {
+		response["status"] = "note does not exist"
+		return response
+	}
+	jsonedNote, err := json.Marshal(note)
+	if err != nil {
+		panic(err)
+	}
+	response["note"] = jsonedNote
+	log.Printf("GetNote response: %v\n", response)
+	return response
+}
+
+func AddNoteToDB(response fiber.Map, params ...interface{}) fiber.Map {
+	db, err := sql.Open("postgres", dblog)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+	title := params[0].(string)
+	description := params[1].(string)
+	user_id := params[2].(int)
+	res, err := db.Exec(fmt.Sprintf("insert into notes(title, description, user_id) values ('%v','%v','%v')", title, description, user_id))
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("Note add result: %v\n", res)
+	return response
+}
+
+func ChangeNoteInDB(response fiber.Map, params ...interface{}) fiber.Map {
+	db, err := sql.Open("postgres", dblog)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+	title := params[0].(string)
+	description := params[1].(string)
+	note_id := params[2].(int)
+	log.Printf("New note values: %v, %v at id=%v\n", title, description, note_id)
+	res, err := db.Exec(fmt.Sprintf("update notes set title='%v', description='%v' where id='%v'", title, description, note_id))
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("Note change result: %v\n", res)
 	return response
 }
 
@@ -339,7 +425,7 @@ func PutRefreshToken(user_id int, refreshToken string) {
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("Update result+%v", res)
+	log.Printf("Refresh token update result+%v", res)
 }
 
 // Добавляет в БД нового пользователя
@@ -358,6 +444,19 @@ func AddNewUser(user User) int {
 	res.Scan(&user_id)
 	log.Printf("New user's id: %v\n", user_id)
 	return user_id
+}
+
+func GetNoteFromDB(note_id int) Note {
+	db, err := sql.Open("postgres", dblog)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+	note := Note{}
+	res := db.QueryRow(fmt.Sprintf("select id, title, description from notes where id = '%v'", note_id))
+	res.Scan(&note.ID, &note.Title, &note.Description)
+	log.Printf("Note to return: %v\n", note)
+	return note
 }
 
 // получает по id список нотесов
@@ -384,7 +483,7 @@ func GetNotesFromDB(user_id int) []Note {
 	return notes
 }
 
-func DeleteNoteFromDB(response fiber.Map, params ...int) fiber.Map {
+func DeleteNoteFromDB(response fiber.Map, params ...interface{}) fiber.Map {
 	db, err := sql.Open("postgres", dblog)
 	if err != nil {
 		panic(err)
