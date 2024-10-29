@@ -64,10 +64,11 @@ const (
 
 // Получаем из env файла параметры для работы БД и секретный ключ
 func init() {
-	if err := godotenv.Load("go.env"); err != nil {
+	if err := godotenv.Load(); err != nil {
 		panic(err)
 	}
 	dblog, _ = os.LookupEnv("dblog")
+	log.Println("DB login info: " + dblog)
 	GetKey()
 	publicKey = &key.PublicKey
 	Migrate()
